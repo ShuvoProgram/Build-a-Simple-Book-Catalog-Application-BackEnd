@@ -32,6 +32,61 @@ const run = async () => {
             res.send({ status: true, data: cursor });
         })
 
+        app.get('/book/:id', async (req, res) => {
+            const id = req.params.id;
+            const result = await booksCollection.findOne({ _id: new ObjectId(id) })
+            res.send({ status: true, data: result })
+        })
+
+        app.delete('/book/:id', async (req, res) => {
+            const id = req.params.id;
+            if (!ObjectId.isValid(id)) {
+                {
+                    return res.status(400).json({ error: 'Invalid ID format' });
+                }
+            }
+
+            const result = await booksCollection.deleteOne({ _id: new ObjectId(id) });
+            if (result.deletedCount === 0) {
+                return res.status(404).json({ error: 'Book not found' })
+            }
+            res.send({ status: true, data: result });
+        })
+
+        app.post('/comment/:id', async (req, res) => {
+            const bookId = req.params.id;
+            const comment = req.body.comment;
+
+            console.log(bookId);
+            console.log(comment);
+
+            const result = await booksCollection.updateOne(
+                { _id: new ObjectId(bookId) },
+                { $push: { comments: comment } }
+            )
+            if (result.modifiedCount !== 1) {
+                console.error('Book not found or comment not added');
+                res.json({ error: 'Book not found or comment not added' });
+                return;
+            }
+            res.json({ message: 'Comment added successfully' });
+        })
+
+        app.get('/comment/:id', async (req, res) => {
+            const bookId = req.params.id;
+
+            const result = await booksCollection.findOne(
+                { _id: new ObjectId(bookId) },
+                { projection: { _id: 0, comments: 1 } }
+            );
+
+            if (result) {
+                res.json(result);
+            } else {
+                res.status(404).json({ error: 'Product not found' });
+            }
+        });
+
     } catch (error) {
         console.log(error)
     }
