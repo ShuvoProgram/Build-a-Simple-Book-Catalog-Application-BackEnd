@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const jwt = require("jsonwebtoken");
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 5000;
@@ -16,9 +17,89 @@ const client = new MongoClient(uri, {
     serverApi: ServerApiVersion.v1,
 });
 
+//Verify User
+function verifyJWT(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        return res.status(401).send("unauthorized access");
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    jwt.verify(token, process.env.ACCESS_TOKEN, function (err, decoded) {
+        if (err) {
+            return res.status(403).send({ message: "forbidden access" });
+        }
+        req.decoded = decoded;
+        next();
+    });
+}
+
+const generateAuthToken = (user) => {
+    const jwtSecretKey = process.env.JWT_SECRET_KEY;
+    const token = jwt.sign(
+        { _id: user._id, name: user.name, email: user.email },
+        jwtSecretKey
+    );
+
+    return token;
+};
+
 const run = async () => {
     try {
         const booksCollection = client.db('books_catalog').collection('books');
+        const usersCollection = client.db('books_catalog').collection('users');
+        const whishlistCollection = client.db('books_catalog').collection('whishlist')
+
+        app.get('/token', async (req, res) => {
+            const email = req.query.email;
+            if (!email || !email.includes("@")) {
+                res.status(400).send({
+                    message: "Email is required",
+                    success: false,
+                });
+                return;
+            }
+            const query = { email: email };
+            const user = await usersCollection.findOne(query);
+            if (user) {
+                const token = jwt.sign(
+                    { email: user.email },
+                    process.env.ACCESS_TOKEN,
+                    {
+                        expiresIn: "7d",
+                    }
+                );
+                return res.send({
+                    success: true,
+                    token: token,
+                });
+            }
+            res.status(403).send({ token: "" });
+        })
+
+        app.post('/users', async (req, res) => {
+            try {
+                const user = req.body;
+                const result = await usersCollection.insertOne(user);
+                if (result.acknowledged) {
+                    res.send({
+                        success: true,
+                        message: `Successfully register the user`,
+                    });
+                } else {
+                    res.send({
+                        success: false,
+                        message: `Failed to register the user`,
+                    });
+                }
+            } catch (error) {
+                res.send({
+                    success: false,
+                    message: error.message,
+                });
+            }
+        })
 
         app.post('/book', async (req, res) => {
             const book = req.body;
@@ -29,13 +110,34 @@ const run = async () => {
 
         app.get('/books', async (req, res) => {
             const cursor = await booksCollection.find({}).toArray();
-            res.send({ status: true, data: cursor });
+            res.send({ data: cursor });
         })
 
         app.get('/book/:id', async (req, res) => {
             const id = req.params.id;
             const result = await booksCollection.findOne({ _id: new ObjectId(id) })
             res.send({ status: true, data: result })
+        })
+
+        app.patch('/book/:id', async (req, res) => {
+            const { id } = req.params;
+            const { title, author, genre } = req.body;
+            const filter = { _id: new ObjectId(id) }
+            const option = { upsert: true }
+            const updateDoc = {
+                $set: {
+                    title, author, genre
+                }
+            }
+            try {
+                const result = await booksCollection.updateOne(filter, updateDoc, option)
+                if (result.matchedCount === 0) {
+                    return res.status(404).json({ error: 'Book not found' });
+                }
+                res.send({ data: result, id: id });
+            } catch (error) {
+                res.status(500).json({ error: 'An error occurred while updating the book' });
+            }
         })
 
         app.delete('/book/:id', async (req, res) => {
@@ -106,6 +208,72 @@ const run = async () => {
 
             res.send({ status: false });
         });
+        // Search API endpoint
+        app.get('/books', async (req, res) => {
+            const searchTerm = req.query.search;
+            console.log(searchTerm)
+            const query = {
+                $or: [
+                    { title: { $regex: searchTerm, $options: 'i' } },
+                    { author: { $regex: searchTerm, $options: 'i' } },
+                    { genre: { $regex: searchTerm, $options: 'i' } },
+                ]
+            }
+            try {
+                // Search for books matching the title, author, or genre
+                const results = await booksCollection.find(query).toArray();
+                res.send(results);
+            } catch (error) {
+                console.error('Error fetching books:', error);
+                res.status(500).json({ error: 'An error occurred while fetching books' });
+            }
+        });
+
+        app.get('/books/category/:category', async (req, res) => {
+            const searchTerm = req.query.search || '';
+            const categoryFilter = req.params.category || '';
+
+            const searchRegex = new RegExp(searchTerm, 'i');
+
+            const query = {
+                $or: [
+                    { title: searchRegex },
+                    { author: searchRegex },
+                    { genre: searchRegex },
+                ],
+                genre: new RegExp(categoryFilter, 'i'),
+            };
+
+            const result = await booksCollection.find(query).toArray();
+            res.send(result);
+
+        })
+
+        app.post('/wishlist', async (req, res) => {
+            try {
+                const wishlist = req.body;
+                const wishlistId = {
+                    postId: wishlist.postId,
+                    user: wishlist.user,
+                    title: wishlist.title,
+                    author: wishlist.author,
+                    genre: wishlist.genre,
+                    publicationDate: wishlist.publicationDate
+                }
+                const alreadyWishlist = await whishlistCollection.find(wishlistId).toArray();
+                if (alreadyWishlist.length) {
+                    const message = `You have already wishlist`
+                    return res.send({ acknowledged: false, message })
+                }
+                const result = await whishlistCollection.insertOne(wishlist);
+                res.send(result);
+            } catch (error) {
+                res.send({
+                    success: false,
+                    error: error.message
+                })
+            }
+        })
 
     } catch (error) {
         console.log(error)
