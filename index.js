@@ -253,12 +253,12 @@ const run = async () => {
             try {
                 const wishlist = req.body;
                 const wishlistId = {
-                    postId: wishlist.postId,
-                    user: wishlist.user,
-                    title: wishlist.title,
-                    author: wishlist.author,
-                    genre: wishlist.genre,
-                    publicationDate: wishlist.publicationDate
+                    postId: wishlist.postId || '',
+                    user: wishlist.user || '',
+                    title: wishlist.title || '',
+                    author: wishlist.author || '',
+                    genre: wishlist.genre || '',
+                    publicationDate: wishlist.publicationDate || ''
                 }
                 const alreadyWishlist = await whishlistCollection.find(wishlistId).toArray();
                 if (alreadyWishlist.length) {
@@ -274,6 +274,23 @@ const run = async () => {
                 })
             }
         })
+
+        app.get('/wishlist', async (req, res) => {
+            console.log(req.query.user); // Log the user email from the query parameter
+            // Fetch wishlist items for the specified user
+            const email = req.query.user;
+            const query = { user: email };
+            const userWishlist = await whishlistCollection.find(query).toArray();
+
+            res.send(userWishlist);
+        });
+
+        //test
+        app.get('/wishlist', async (req, res) => {
+            const cursor = await whishlistCollection.find({}).toArray();
+            res.send({ data: cursor });
+        })
+
 
     } catch (error) {
         console.log(error)
