@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const jwt = require("jsonwebtoken");
+const bcrypt = require('bcrypt');
+// const { nanoid } = require('nanoid');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 5000;
@@ -189,12 +191,38 @@ const run = async () => {
             }
         });
 
-        app.post('/user', async (req, res) => {
-            const user = req.body;
+        app.post('/users/add', async (req, res) => {
+            try {
+                const { email, password } = req.body;
+                // Check if user already exists
+                const existingUser = await usersCollection.findOne({ email });
+                if (existingUser) {
+                    return res.status(400).json({ message: 'User already exists' });
+                }
+                // Hash the password using bcrypt
+                const hashedPassword = await bcrypt.hash(password, 10);
+                // Create a new user document
+                const newUser = {
+                    email: email,
+                    password: hashedPassword, // In a real scenario, you should hash the password
+                };
+                const result = await usersCollection.insertOne(newUser);
+                // Generate a JWT token
+                const token = jwt.sign({ email }, process.env.JWT_SECRET_KEY); // Replace 'secret-key' with your secret key
 
-            const result = await booksCollection.insertOne(user);
+                // Construct the response with the token
+                const response = {
+                    _id: result.insertedId,
+                    email: newUser.email,
+                    token: token,
+                };
 
-            res.send(result);
+                res.json({ message: 'User registered successfully', response });
+
+            } catch (error) {
+                console.error('Error during registration:', error);
+                res.status(500).json({ message: 'Internal server error' });
+            }
         });
 
         app.get('/user/:email', async (req, res) => {
@@ -208,8 +236,10 @@ const run = async () => {
 
             res.send({ status: false });
         });
+
+
         // Search API endpoint
-        app.get('/books', async (req, res) => {
+        app.get('/book', async (req, res) => {
             const searchTerm = req.query.search;
             console.log(searchTerm)
             const query = {
@@ -228,6 +258,7 @@ const run = async () => {
                 res.status(500).json({ error: 'An error occurred while fetching books' });
             }
         });
+
 
         app.get('/books/category/:category', async (req, res) => {
             const searchTerm = req.query.search || '';
@@ -276,20 +307,23 @@ const run = async () => {
         })
 
         app.get('/wishlist', async (req, res) => {
-            console.log(req.query.user); // Log the user email from the query parameter
+            // Log the user email from the query parameter
             // Fetch wishlist items for the specified user
             const email = req.query.user;
             const query = { user: email };
+            console.log(query)
             const userWishlist = await whishlistCollection.find(query).toArray();
-
             res.send(userWishlist);
         });
 
-        //test
-        app.get('/wishlist', async (req, res) => {
-            const cursor = await whishlistCollection.find({}).toArray();
-            res.send({ data: cursor });
+        app.delete('/wishlist/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await whishlistCollection.deleteOne(query);
+            res.send(result);
         })
+
+
 
 
     } catch (error) {
