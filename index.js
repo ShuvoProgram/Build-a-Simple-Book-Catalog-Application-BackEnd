@@ -225,6 +225,18 @@ const run = async () => {
             }
         });
 
+        // API endpoint to get user by ID
+        app.get('/users/:id', async (req, res) => {
+            const userId = req.params.id;
+            // Find the user in the collection by ID
+            const result = await usersCollection.findOne({ _id: new ObjectId(userId) });
+            if (result) {
+                res.json(result);
+            } else {
+                res.status(404).json({ error: 'User not found' });
+            }
+        });
+
         app.get('/user/:email', async (req, res) => {
             const email = req.params.email;
 
