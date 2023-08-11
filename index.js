@@ -111,9 +111,19 @@ const run = async () => {
         })
 
         app.get('/books', async (req, res) => {
-            const cursor = await booksCollection.find({}).toArray();
+            const cursor = await booksCollection.find({}).sort({ _id: -1 }).toArray();
             res.send({ data: cursor });
         })
+
+        app.get('/recent-books', async (req, res) => {
+            const recentBooks = await booksCollection.find({})
+                .sort({ _id: -1 })
+                .limit(10)
+                .toArray();
+
+            res.send({ data: recentBooks });
+        });
+
 
         app.get('/book/:id', async (req, res) => {
             const id = req.params.id;
@@ -160,9 +170,6 @@ const run = async () => {
         app.post('/comment/:id', async (req, res) => {
             const bookId = req.params.id;
             const comment = req.body.comment;
-
-            console.log(bookId);
-            console.log(comment);
 
             const result = await booksCollection.updateOne(
                 { _id: new ObjectId(bookId) },
@@ -237,17 +244,17 @@ const run = async () => {
             }
         });
 
-        app.get('/user/:email', async (req, res) => {
-            const email = req.params.email;
+        // app.get('/user/:email', async (req, res) => {
+        //     const email = req.params.email;
 
-            const result = await booksCollection.findOne({ email });
+        //     const result = await booksCollection.findOne({ email });
 
-            if (result?.email) {
-                return res.send({ status: true, data: result });
-            }
+        //     if (result?.email) {
+        //         return res.send({ status: true, data: result });
+        //     }
 
-            res.send({ status: false });
-        });
+        //     res.send({ status: false });
+        // });
 
 
         // Search API endpoint
@@ -323,7 +330,6 @@ const run = async () => {
             // Fetch wishlist items for the specified user
             const email = req.query.user;
             const query = { user: email };
-            console.log(query)
             const userWishlist = await whishlistCollection.find(query).toArray();
             res.send(userWishlist);
         });
