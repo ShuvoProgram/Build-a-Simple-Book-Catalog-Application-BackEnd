@@ -167,6 +167,58 @@ const run = async () => {
             res.send({ status: true, data: result });
         })
 
+        app.delete(
+            "/book/:id/:postId",
+            async (req, res) => {
+                try {
+                    const { id, postId } = req.params;
+
+                    const bookQuery = { _id: new ObjectId(id) };
+                    const book = await booksCollection.findOne(bookQuery);
+
+                    if (!book) {
+                        res.send({
+                            success: false,
+                            error: "Book not found",
+                        });
+                        return;
+                    }
+
+                    // Check if the book exists in the wishlist collection
+                    const wishlistQuery = { _id: new ObjectId(postId) };
+                    const wishlistBook = await whishlistCollection.findOne(wishlistQuery);
+
+                    let deletedFromWishlist = true;
+                    if (wishlistBook) {
+                        const deleteWishlistResult = await whishlistCollection.deleteOne(wishlistQuery);
+                        if (!deleteWishlistResult.acknowledged || deleteWishlistResult.deletedCount !== 1) {
+                            deletedFromWishlist = false;
+                        }
+                    }
+
+                    const deleteBookResult = await booksCollection.deleteOne(bookQuery);
+                    if (deleteBookResult.acknowledged && deleteBookResult.deletedCount === 1) {
+                        res.send({
+                            success: true,
+                            message: "Book Deleted Successfully",
+                            deletedFromWishlist: deletedFromWishlist,
+                        });
+                    } else {
+                        res.send({
+                            success: false,
+                            error: "Book Delete Failed",
+                        });
+                    }
+                } catch (error) {
+                    res.send({
+                        success: false,
+                        error: error.message,
+                    });
+                }
+            }
+        );
+
+
         app.post('/comment/:id', async (req, res) => {
             const bookId = req.params.id;
             const comment = req.body.comment;
@@ -244,23 +296,9 @@ const run = async () => {
             }
         });
 
-        // app.get('/user/:email', async (req, res) => {
-        //     const email = req.params.email;
-
-        //     const result = await booksCollection.findOne({ email });
-
-        //     if (result?.email) {
-        //         return res.send({ status: true, data: result });
-        //     }
-
-        //     res.send({ status: false });
-        // });
-
-
         // Search API endpoint
         app.get('/book', async (req, res) => {
             const searchTerm = req.query.search;
-            console.log(searchTerm)
             const query = {
                 $or: [
                     { title: { $regex: searchTerm, $options: 'i' } },
@@ -279,25 +317,25 @@ const run = async () => {
         });
 
 
-        app.get('/books/category/:category', async (req, res) => {
-            const searchTerm = req.query.search || '';
-            const categoryFilter = req.params.category || '';
+        // app.get('/books/category/:category', async (req, res) => {
+        //     const searchTerm = req.query.search || '';
+        //     const categoryFilter = req.params.category || '';
 
-            const searchRegex = new RegExp(searchTerm, 'i');
+        //     const searchRegex = new RegExp(searchTerm, 'i');
 
-            const query = {
-                $or: [
-                    { title: searchRegex },
-                    { author: searchRegex },
-                    { genre: searchRegex },
-                ],
-                genre: new RegExp(categoryFilter, 'i'),
-            };
+        //     const query = {
+        //         $or: [
+        //             { title: searchRegex },
+        //             { author: searchRegex },
+        //             { genre: searchRegex },
+        //         ],
+        //         genre: new RegExp(categoryFilter, 'i'),
+        //     };
 
-            const result = await booksCollection.find(query).toArray();
-            res.send(result);
+        //     const result = await booksCollection.find(query).toArray();
+        //     res.send(result);
 
-        })
+        // })
 
         app.post('/wishlist', async (req, res) => {
             try {
