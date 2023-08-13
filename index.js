@@ -52,6 +52,8 @@ const run = async () => {
         const booksCollection = client.db('books_catalog').collection('books');
         const usersCollection = client.db('books_catalog').collection('users');
         const whishlistCollection = client.db('books_catalog').collection('whishlist')
+        const readingCollection = client.db('books_catalog').collection('reading')
+        const readingFinishedCollection = client.db('books_catalog').collection('readingFinished')
 
         app.get('/token', async (req, res) => {
             const email = req.query.email;
@@ -344,6 +346,7 @@ const run = async () => {
                     postId: wishlist.postId || '',
                     user: wishlist.user || '',
                     title: wishlist.title || '',
+                    image: wishlist.image || '',
                     author: wishlist.author || '',
                     genre: wishlist.genre || '',
                     publicationDate: wishlist.publicationDate || ''
@@ -379,8 +382,79 @@ const run = async () => {
             res.send(result);
         })
 
+        app.post('/reading-list', async (req, res) => {
+            try {
+                const readingList = req.body;
+                const readingId = {
+                    postId: readingList.postId || '',
+                    user: readingList.user || '',
+                    title: readingList.title || '',
+                    image: readingList.image || '',
+                    author: readingList.author || '',
+                    genre: readingList.genre || '',
+                    publicationDate: readingList.publicationDate || ''
+                }
+                const alreadyreadingList = await readingCollection.find(readingId).toArray();
+                if (alreadyreadingList.length) {
+                    const message = `You have already reading List`
+                    return res.send({ acknowledged: false, message })
+                }
+                const result = await readingCollection.insertOne(readingList);
+                res.send(result);
+            } catch (error) {
+                res.send({
+                    success: false,
+                    error: error.message
+                })
+            }
+        })
 
+        app.get('/reading-list', async (req, res) => {
+            // Log the user email from the query parameter
+            // Fetch wishlist items for the specified user
+            const email = req.query.user;
+            const query = { user: email };
+            const userReading = await readingCollection.find(query).toArray();
+            res.send(userReading);
+        });
 
+        app.delete('/reading-list/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await readingCollection.deleteOne(query);
+            res.send(result);
+        })
+
+        app.post('/reading-finished/:postId', async (req, res) => {
+            try {
+                const { postId } = req.params;
+
+                if (!postId) {
+                    return res.status(400).json({ message: 'Book ID is required.' });
+                }
+                const existingBook = await readingCollection.findOne({ postId: postId })
+                if (!existingBook) {
+                    return res.status(404).json({ message: 'Book not found.' });
+                }
+                // Move the book to readingFinishedCollection
+                const readingFinished = await readingFinishedCollection.insertOne(existingBook);
+                if (readingFinished.insertedId) {
+                    const deleteReadBook = await readingCollection.deleteOne({ postId: postId });
+
+                    if (deleteReadBook.deletedCount) {
+                        return res.status(200).json({
+                            message: 'Book finished and moved to readingFinishedCollection'
+                        });
+                    }
+                }
+
+                return res.status(500).json({ message: 'Failed to move the book.' });
+
+            } catch (error) {
+                console.error('Error:', error);
+                res.status(500).json({ message: 'Internal server error.' });
+            }
+        })
 
     } catch (error) {
         console.log(error)
