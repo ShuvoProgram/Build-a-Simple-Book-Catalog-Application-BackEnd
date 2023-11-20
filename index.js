@@ -313,7 +313,6 @@ const run = async () => {
                 const results = await booksCollection.find(query).toArray();
                 res.send(results);
             } catch (error) {
-                console.error('Error fetching books:', error);
                 res.status(500).json({ error: 'An error occurred while fetching books' });
             }
         });
@@ -451,7 +450,7 @@ const run = async () => {
                 return res.status(500).json({ message: 'Failed to move the book.' });
 
             } catch (error) {
-                console.error('Error:', error);
+                
                 res.status(500).json({ message: 'Internal server error.' });
             }
         })
